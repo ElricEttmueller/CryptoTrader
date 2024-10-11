@@ -1,52 +1,51 @@
+# Virtual environments
+env/
+`env/
+venv/
+.venv/
+ENV/
+envsource/
+envsource/
+`env/`
+
+
+# Node modules and other dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Build directories
+frontend/build/
+backend/build/
+dist/
+out/
+
+# Environment variables
+*.env
+frontend/.env
+backend/.env
+
+# Log files
+*.log
+logs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
 
-# C extensions
-*.so
-
-# Virtual environment folders
-env/
-venv/
-.venv/
-ENV/
-
-# FastAPI/Backend specific logs and data
-*.log
-*.sqlite3
-*.db
-
-# Frontend specific build files
-frontend/node_modules/
-frontend/build/
-frontend/.env
-
-# macOS System files
+# macOS system files
 .DS_Store
 
-# Windows System files
+# Windows system files
 Thumbs.db
-
-# Python package files
-*.egg-info/
-.eggs/
 
 # IDE specific files (VSCode, PyCharm, etc.)
 .vscode/
 .idea/
 
-# Test coverage files
-.coverage
+# Test and coverage files
+coverage/
 *.cover
-.coverage.*
-.cache/
 .nox/
-pytest_cache/
-.tox/
-
-# Jupyter Notebooks
-.ipynb_checkpoints
-
-# Miscellaneous
-*.env
+*.test-output
