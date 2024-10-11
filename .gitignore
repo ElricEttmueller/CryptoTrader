@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment folders
+env/
+venv/
+.venv/
+ENV/
+
+# FastAPI/Backend specific logs and data
+*.log
+*.sqlite3
+*.db
+
+# Frontend specific build files
+frontend/node_modules/
+frontend/build/
+frontend/.env
+
+# macOS System files
+.DS_Store
+
+# Windows System files
+Thumbs.db
+
+# Python package files
+*.egg-info/
+.eggs/
+
+# IDE specific files (VSCode, PyCharm, etc.)
+.vscode/
+.idea/
+
+# Test coverage files
+.coverage
+*.cover
+.coverage.*
+.cache/
+.nox/
+pytest_cache/
+.tox/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# Miscellaneous
+*.env
