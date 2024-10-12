@@ -1,0 +1,316 @@
+===== main.py =====
+from fastapi import FastAPI
+import ccxt
+import logging
+from urllib.parse import unquote
+from datetime import datetime
+
+
+app = FastAPI()
+
+
+logging.basicConfig(level=logging.INFO)
+
+
+
+@app.get("/live-data/{pair:path}")
+async def get_live_data(pair: str):
+    decoded_pair = unquote(pair)
+    logging.info(f"Decoded pair: {decoded_pair}")
+    return {"pair_received": decoded_pair}
+
+
+@app.get("/markets")
+async def get_markets():
+    exchange = ccxt.binance()
+    markets = exchange.load_markets()
+    return {"available_markets": list(markets.keys())}
+
+
+
+@app.get("/historical-data/{pair:path}")
+async def get_historical_data(pair: str, timeframe: str = "1h", start_date: str = None, end_date: str = None):
+    decoded_pair = unquote(pair)
+    exchange = ccxt.binance()
+    since = exchange.parse8601(start_date) if start_date else None
+    until = exchange.parse8601(end_date) if end_date else None
+
+    try:
+        ohlcv = exchange.fetch_ohlcv(
+            symbol=decoded_pair,
+            timeframe=timeframe,
+            since=since,
+            limit=1000
+        )
+        return {"pair": decoded_pair, "data": ohlcv}
+    except Exception as e:
+        logging.error(f"Error fetching historical data: {e}")
+        return {"error": str(e)}
+
+
+for route in app.routes:
+    print(f"Route path: {route.path}, methods: {route.methods}")
+
+
+===== App.js =====
+import React, { useEffect, useState } from 'react';
+import { fetchMarkets, fetchLiveData, fetchHistoricalData } from './apiService';
+
+
+function Markets() {
+    const [markets, setMarkets] = useState([]);
+
+    useEffect(() => {
+        const getMarkets = async () => {
+            const data = await fetchMarkets();
+            setMarkets(data.available_markets);
+        };
+        getMarkets();
+    }, []);
+
+    return (
+        <div>
+            <h2>Available Markets</h2>
+            <ul>
+                {markets.map((market, index) => (
+                    <li key={index}>{market}</li>
+                ))}
+            </ul>
+        </div>
+    );
+}
+
+function App() {
+    return (
+        <div>
+            <h1>Crypto Trading Platform</h1>
+            <Markets />
+        </div>
+    );
+}
+
+export default App;
+
+
+===== index.js =====
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';
+import App from './App';
+import reportWebVitals from './reportWebVitals';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+
+// If you want to start measuring performance in your app, pass a function
+// to log results (for example: reportWebVitals(console.log))
+// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+reportWebVitals();
+
+
+===== apiService.js =====
+// src/apiService.js
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: 'http://127.0.0.1:8000', // Ensure this matches your backend URL
+});
+
+export async function fetchMarkets() {
+    try {
+        const response = await api.get('/markets');
+        return response.data.available_markets;
+    } catch (error) {
+        console.error("Error fetching markets:", error);
+        return [];
+    }
+}
+
+export const fetchLiveData = async (pair) => {
+    try {
+        const response = await api.get(`/live-data/${encodeURIComponent(pair)}`);
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching live data:', error);
+        return null;
+    }
+};
+
+export const fetchHistoricalData = async (pair, timeframe, startDate, endDate) => {
+    try {
+        const response = await api.get(`/historical-data/${encodeURIComponent(pair)}`, {
+            params: {
+                timeframe,
+                start_date: startDate,
+                end_date: endDate,
+            },
+        });
+        return response.data;
+    } catch (error) {
+        console.error('Error fetching historical data:', error);
+        return null;
+    }
+};
+
+
+===== Dashboard.js =====
+// src/components/Dashboard.js
+import React, { useState, useEffect } from 'react';
+import { fetchHistoricalData } from '../apiService';
+import Chart from './Chart';
+import PriceTicker from './PriceTicker';
+
+const Dashboard = () => {
+    const [historicalData, setHistoricalData] = useState([]);
+    const [selectedMarket, setSelectedMarket] = useState('BTC/USDT');
+
+    useEffect(() => {
+        const fetchData = async () => {
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - 30); // Last 30 days of data
+            const formattedStartDate = startDate.toISOString();
+
+            const data = await fetchHistoricalData(selectedMarket, '1h', formattedStartDate);
+            if (data && data.data) {
+                const chartData = data.data.map((point) => ({
+                    x: new Date(point[0]),
+                    open: point[1],
+                    high: point[2],
+                    low: point[3],
+                    close: point[4],
+                    volume: point[5],
+                }));
+
+                setHistoricalData(chartData);
+            }
+        };
+
+        fetchData();
+    }, [selectedMarket]);
+
+    const chartData = [
+        {
+            x: historicalData.map((d) => d.x),
+            open: historicalData.map((d) => d.open),
+            high: historicalData.map((d) => d.high),
+            low: historicalData.map((d) => d.low),
+            close: historicalData.map((d) => d.close),
+            type: 'candlestick',
+            name: 'Price',
+        }
+    ];
+
+    const layout = {
+        title: `Price Chart for ${selectedMarket}`,
+        xaxis: { title: 'Date' },
+        yaxis: { title: 'Price (USD)' },
+    };
+
+    return (
+        <div>
+            <h1>Crypto Dashboard</h1>
+            <Chart data={chartData} layout={layout} />
+        </div>
+    );
+};
+
+
+return (
+    <div className="dashboard-container">
+        <h1>Crypto Dashboard</h1>
+        <PriceTicker market={selectedMarket} />
+        <div className="chart-wrapper">
+            <Chart data={chartData} layout={layout} />
+        </div>
+    </div>
+);
+
+export default Dashboard;
+
+
+===== Header.js =====
+
+
+===== LiveData.js =====
+
+
+===== MarketList.js =====
+// src/components/MarketList.js
+import React, { useEffect, useState } from 'react';
+import { fetchMarkets } from '../apiService';
+
+const MarketList = () => {
+    const [markets, setMarkets] = useState([]);
+
+    useEffect(() => {
+        const getMarkets = async () => {
+            const data = await fetchMarkets();
+            setMarkets(data);
+        };
+        getMarkets();
+    }, []);
+
+    return (
+        <div>
+            <h2>Available Markets</h2>
+            <ul>
+                {markets.map((market, index) => (
+                    <li key={index}>{market}</li>
+                ))}
+            </ul>
+        </div>
+    );
+};
+
+export default MarketList;
+
+
+===== MarketSelector.js =====
+// src/components/MarketSelector.js
+
+import React, { useState, useEffect } from 'react';
+import { fetchMarkets } from './apiService';
+
+const MarketSelector = ({ onMarketSelect }) => {
+    const [markets, setMarkets] = useState([]);
+    const [selectedMarket, setSelectedMarket] = useState('');
+
+    useEffect(() => {
+        const getMarkets = async () => {
+            const availableMarkets = await fetchMarkets();
+            setMarkets(availableMarkets);
+        };
+        getMarkets();
+    }, []);
+
+    const handleChange = (e) => {
+        const market = e.target.value;
+        setSelectedMarket(market);
+        onMarketSelect(market); // Pass the selected market to the parent component
+    };
+
+    return (
+        <div>
+            <h2>Select a Market</h2>
+            <select value={selectedMarket} onChange={handleChange}>
+                <option value="">Select a market</option>
+                {markets.map((market, index) => (
+                    <option key={index} value={market}>
+                        {market}
+                    </option>
+                ))}
+            </select>
+        </div>
+    );
+};
+
+export default MarketSelector;
+
+
+===== SettingsPanel.js =====
+
+
