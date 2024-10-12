@@ -1,17 +1,24 @@
 ===== main.py =====
-from fastapi import FastAPI
-import ccxt
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import ccxt.async_support as ccxt_async 
 import logging
 from urllib.parse import unquote
 from datetime import datetime
-
+import logging
+import asyncio
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 logging.basicConfig(level=logging.INFO)
-
-
 
 @app.get("/live-data/{pair:path}")
 async def get_live_data(pair: str):
@@ -19,97 +26,107 @@ async def get_live_data(pair: str):
     logging.info(f"Decoded pair: {decoded_pair}")
     return {"pair_received": decoded_pair}
 
+@app.websocket("/ws/{pair:path}")
+async def websocket_endpoint(websocket: WebSocket, pair: str):
+    await websocket.accept()
+    decoded_pair = unquote(pair)
+    formatted_pair = decoded_pair  # No need to replace '-' with '/'
+    exchange = ccxt_async.binance()
+    # Rest of the code...
+
+
+    try:
+        while True:
+            ticker = await exchange.fetch_ticker(formatted_pair)
+            await websocket.send_json({
+                'timestamp': ticker['timestamp'],
+                'last': ticker['last'],
+                'bid': ticker['bid'],
+                'ask': ticker['ask'],
+                'high': ticker['high'],
+                'low': ticker['low'],
+                'volume': ticker['baseVolume'],
+            })
+            await asyncio.sleep(1)  # Adjust the interval as needed
+    except WebSocketDisconnect:
+        logging.info("WebSocket disconnected")
+    except Exception as e:
+        logging.error(f"Error in WebSocket: {e}")
+    finally:
+        await exchange.close()
+        await websocket.close()
 
 @app.get("/markets")
 async def get_markets():
-    exchange = ccxt.binance()
-    markets = exchange.load_markets()
-    return {"available_markets": list(markets.keys())}
-
+    try:
+        exchange = ccxt.binance()
+        markets = exchange.load_markets()
+        available_markets = list(markets.keys())
+        logging.info(f"Markets fetched: {available_markets}")  # Log the markets fetched
+        return {"available_markets": available_markets}
+    except Exception as e:
+        logging.error(f"Error loading markets: {e}")
+        return {"error": str(e)}
 
 
 @app.get("/historical-data/{pair:path}")
 async def get_historical_data(pair: str, timeframe: str = "1h", start_date: str = None, end_date: str = None):
     decoded_pair = unquote(pair)
+    formatted_pair = decoded_pair.replace('/', '')  # Convert 'BTC/USDT' to 'BTCUSDT'
+    
     exchange = ccxt.binance()
     since = exchange.parse8601(start_date) if start_date else None
     until = exchange.parse8601(end_date) if end_date else None
 
+    logging.info(f"Fetching historical data for pair: {formatted_pair}, timeframe: {timeframe}, since: {start_date}, until: {end_date}")
+
     try:
         ohlcv = exchange.fetch_ohlcv(
-            symbol=decoded_pair,
+            symbol=formatted_pair,
             timeframe=timeframe,
             since=since,
             limit=1000
         )
-        return {"pair": decoded_pair, "data": ohlcv}
+        logging.info(f"Data fetched for pair {formatted_pair}: {ohlcv}")
+        return {"pair": formatted_pair, "data": ohlcv}
     except Exception as e:
         logging.error(f"Error fetching historical data: {e}")
         return {"error": str(e)}
 
 
-for route in app.routes:
-    print(f"Route path: {route.path}, methods: {route.methods}")
-
-
 ===== App.js =====
-import React, { useEffect, useState } from 'react';
-import { fetchMarkets, fetchLiveData, fetchHistoricalData } from './apiService';
+import React from 'react';
+import Markets from './components/Markets';
+import Dashboard from './components/Dashboard';  // Assuming Dashboard has the chart component
 
-
-function Markets() {
-    const [markets, setMarkets] = useState([]);
-
-    useEffect(() => {
-        const getMarkets = async () => {
-            const data = await fetchMarkets();
-            setMarkets(data.available_markets);
-        };
-        getMarkets();
-    }, []);
-
-    return (
-        <div>
-            <h2>Available Markets</h2>
-            <ul>
-                {markets.map((market, index) => (
-                    <li key={index}>{market}</li>
-                ))}
-            </ul>
-        </div>
-    );
-}
-
+// App.js
 function App() {
     return (
         <div>
             <h1>Crypto Trading Platform</h1>
             <Markets />
+            <Dashboard />
         </div>
     );
 }
+
 
 export default App;
 
 
 ===== index.js =====
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
+import { createRoot } from 'react-dom/client';  // Import createRoot from React 18
 import App from './App';
-import reportWebVitals from './reportWebVitals';
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const container = document.getElementById('root');  // Get the root element
+const root = createRoot(container);  // Create a React 18 root
+
 root.render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
-
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
-reportWebVitals();
 
 
 ===== apiService.js =====
@@ -117,18 +134,27 @@ reportWebVitals();
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'http://127.0.0.1:8000', // Ensure this matches your backend URL
+    baseURL: 'http://localhost:8000',  // Ensure the base URL is correct
 });
+
 
 export async function fetchMarkets() {
     try {
         const response = await api.get('/markets');
-        return response.data.available_markets;
+        console.log("Full response from backend /markets:", response);  // Log the full response object
+        console.log("Available markets in response:", response.data.available_markets);  // Log specifically the markets data
+        return response.data.available_markets || [];  // Ensure the response is an array, or return an empty array
     } catch (error) {
         console.error("Error fetching markets:", error);
-        return [];
+        return [];  // Return an empty array in case of an error
     }
 }
+
+
+
+
+
+
 
 export const fetchLiveData = async (pair) => {
     try {
@@ -140,96 +166,160 @@ export const fetchLiveData = async (pair) => {
     }
 };
 
+// Corrected fetchHistoricalData function in apiService.js
 export const fetchHistoricalData = async (pair, timeframe, startDate, endDate) => {
+    // Remove the '/' in the pair symbol (e.g., BTC/USDT becomes BTCUSDT)
+    const formattedPair = pair.replace('/', '');
+
     try {
-        const response = await api.get(`/historical-data/${encodeURIComponent(pair)}`, {
+        const response = await api.get(`/historical-data/${encodeURIComponent(formattedPair)}`, {
             params: {
                 timeframe,
                 start_date: startDate,
                 end_date: endDate,
             },
         });
-        return response.data;
+        console.log("Historical data response:", response.data);  // Log the response for debugging
+        return response.data;  // Return the data from the backend
     } catch (error) {
-        console.error('Error fetching historical data:', error);
+        console.error('Error fetching historical data:', error);  // Handle error
         return null;
     }
 };
 
 
-===== Dashboard.js =====
-// src/components/Dashboard.js
-import React, { useState, useEffect } from 'react';
-import { fetchHistoricalData } from '../apiService';
-import Chart from './Chart';
-import PriceTicker from './PriceTicker';
 
-const Dashboard = () => {
-    const [historicalData, setHistoricalData] = useState([]);
-    const [selectedMarket, setSelectedMarket] = useState('BTC/USDT');
 
-    useEffect(() => {
-        const fetchData = async () => {
-            const startDate = new Date();
-            startDate.setDate(startDate.getDate() - 30); // Last 30 days of data
-            const formattedStartDate = startDate.toISOString();
 
-            const data = await fetchHistoricalData(selectedMarket, '1h', formattedStartDate);
-            if (data && data.data) {
-                const chartData = data.data.map((point) => ({
-                    x: new Date(point[0]),
-                    open: point[1],
-                    high: point[2],
-                    low: point[3],
-                    close: point[4],
-                    volume: point[5],
-                }));
+===== Chart.js =====
+// src/components/Chart.js
+import React from 'react';
+import Plot from 'react-plotly.js';
 
-                setHistoricalData(chartData);
-            }
-        };
-
-        fetchData();
-    }, [selectedMarket]);
-
-    const chartData = [
-        {
-            x: historicalData.map((d) => d.x),
-            open: historicalData.map((d) => d.open),
-            high: historicalData.map((d) => d.high),
-            low: historicalData.map((d) => d.low),
-            close: historicalData.map((d) => d.close),
-            type: 'candlestick',
-            name: 'Price',
-        }
-    ];
-
-    const layout = {
-        title: `Price Chart for ${selectedMarket}`,
-        xaxis: { title: 'Date' },
-        yaxis: { title: 'Price (USD)' },
-    };
+const Chart = ({ data, layout }) => {
+    console.log('Chart component received data:', data);
+    console.log('Chart component received layout:', layout);
 
     return (
         <div>
-            <h1>Crypto Dashboard</h1>
-            <Chart data={chartData} layout={layout} />
+            <Plot
+                data={data}
+                layout={{ ...layout, autosize: true }}
+                style={{ width: '100%', height: '100%' }}
+                config={{ responsive: true, scrollZoom: true }}
+                useResizeHandler={true}
+            />
         </div>
     );
 };
 
+export default Chart;
 
-return (
-    <div className="dashboard-container">
-        <h1>Crypto Dashboard</h1>
-        <PriceTicker market={selectedMarket} />
-        <div className="chart-wrapper">
-            <Chart data={chartData} layout={layout} />
+
+===== Markets.js =====
+import React, { useEffect, useState } from 'react';
+import { fetchMarkets } from '../apiService';
+
+function Markets() {
+    const [markets, setMarkets] = useState([]);  // Original list of markets
+    const [filteredMarkets, setFilteredMarkets] = useState([]);  // Filtered and sorted markets
+    const [searchQuery, setSearchQuery] = useState('');  // Search query state
+    const [sortOrder, setSortOrder] = useState('asc');  // Sorting order
+    const [loading, setLoading] = useState(true);  // Loading state
+    const [error, setError] = useState(null);  // Error state
+    const [visibleCount, setVisibleCount] = useState(10);  // Number of markets to display initially
+
+    // Fetch markets from the API once on component mount
+    useEffect(() => {
+        const getMarkets = async () => {
+            try {
+                const data = await fetchMarkets();
+                if (data && Array.isArray(data)) {
+                    setMarkets(data);
+                    setFilteredMarkets(data);  // Initially, show all markets
+                    console.log("Markets fetched:", data);
+                } else {
+                    setError("Invalid markets data format");
+                }
+            } catch (error) {
+                console.error("Error fetching markets:", error);
+                setError("Failed to load markets");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        getMarkets();
+    }, []);
+
+    // Handle search input change and filter the markets based on the search query
+    useEffect(() => {
+        const filtered = markets.filter((market) =>
+            market.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        setFilteredMarkets(filtered);  // Update filtered markets based on search query
+        setVisibleCount(10);  // Reset the visible count when searching
+    }, [searchQuery, markets]);
+
+    // Sorting logic
+    const handleSort = (order) => {
+        const sortedMarkets = [...filteredMarkets].sort((a, b) => {
+            return order === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+        });
+        setSortOrder(order);
+        setFilteredMarkets(sortedMarkets);  // Update the filtered markets after sorting
+    };
+
+    // Function to load more markets
+    const loadMore = () => {
+        setVisibleCount((prevCount) => prevCount + 10);  // Show 10 more markets each time
+    };
+
+    if (loading) {
+        return <p>Loading markets...</p>;
+    }
+
+    if (error) {
+        return <p>{error}</p>;
+    }
+
+    return (
+        <div>
+            <h2>Available Markets</h2>
+
+            {/* Search bar */}
+            <input
+                type="text"
+                placeholder="Search markets..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}  // Update search query
+                style={{ marginBottom: '20px', padding: '10px', width: '100%' }}
+            />
+
+            {/* Sorting buttons */}
+            <div>
+                <button onClick={() => handleSort('asc')}>Sort A-Z</button>
+                <button onClick={() => handleSort('desc')}>Sort Z-A</button>
+            </div>
+
+            {/* Display limited filtered markets */}
+            <ul>
+                {filteredMarkets.slice(0, visibleCount).map((market, index) => (
+                    <li key={index}>{market}</li>
+                ))}
+            </ul>
+
+            {/* Show Load More button if there are more markets to display */}
+            {visibleCount < filteredMarkets.length && (
+                <button onClick={loadMore} style={{ marginTop: '20px' }}>
+                    Load More
+                </button>
+            )}
         </div>
-    </div>
-);
+    );
+}
 
-export default Dashboard;
+export default Markets;
 
 
 ===== Header.js =====
@@ -271,13 +361,12 @@ export default MarketList;
 
 ===== MarketSelector.js =====
 // src/components/MarketSelector.js
-
 import React, { useState, useEffect } from 'react';
-import { fetchMarkets } from './apiService';
+import { fetchMarkets } from '../apiService';
 
 const MarketSelector = ({ onMarketSelect }) => {
     const [markets, setMarkets] = useState([]);
-    const [selectedMarket, setSelectedMarket] = useState('');
+    const [selectedMarket, setSelectedMarket] = useState('BTC/USDT');
 
     useEffect(() => {
         const getMarkets = async () => {
@@ -290,14 +379,15 @@ const MarketSelector = ({ onMarketSelect }) => {
     const handleChange = (e) => {
         const market = e.target.value;
         setSelectedMarket(market);
-        onMarketSelect(market); // Pass the selected market to the parent component
+        if (onMarketSelect) {
+            onMarketSelect(market);
+        }
     };
 
     return (
         <div>
-            <h2>Select a Market</h2>
+            <h3>Select a Market</h3>
             <select value={selectedMarket} onChange={handleChange}>
-                <option value="">Select a market</option>
                 {markets.map((market, index) => (
                     <option key={index} value={market}>
                         {market}

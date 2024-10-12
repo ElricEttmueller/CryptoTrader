@@ -5,6 +5,7 @@ directories_to_explore = {
     "backend": ["main.py"],
     "frontend/src": ["App.js", "index.js", "apiService.js"],
     "frontend/src/components": [
+        "Chart.js", "Markets.js", "PriceTicker", "fetchMarkets"
         "Dashboard.js", "Header.js", "LiveData.js", 
         "MarketList.js", "MarketSelector.js", "SettingsPanel.js"
     ]
