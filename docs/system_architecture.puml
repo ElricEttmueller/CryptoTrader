@@ -1,0 +1,136 @@
+@startuml CryptoTrader System Architecture
+
+' Styling
+!define RECTANGLE class
+skinparam rectangle {
+    BackgroundColor White
+    BorderColor #666666
+    ArrowColor #666666
+}
+skinparam package {
+    BackgroundColor White
+    BorderColor #666666
+}
+skinparam component {
+    BackgroundColor White
+    BorderColor #666666
+}
+skinparam database {
+    BackgroundColor White
+    BorderColor #666666
+}
+skinparam interface {
+    BackgroundColor White
+    BorderColor #666666
+}
+
+' Top level components
+package "Frontend (React)" {
+    rectangle "Trading Dashboard" as Dashboard {
+        [Bot Management UI]
+        [Market Data Charts]
+        [Performance Metrics]
+        [Strategy Configuration]
+        [Portfolio Overview]
+    }
+    
+    rectangle "Real-time Updates" {
+        [WebSocket Client]
+        [State Management]
+    }
+    
+    rectangle "Data Visualization" {
+        [Trading Charts]
+        [Performance Graphs]
+        [Portfolio Analytics]
+    }
+}
+
+package "Backend (FastAPI)" {
+    rectangle "API Layer" {
+        [REST Endpoints]
+        [WebSocket Server]
+        [Authentication]
+    }
+    
+    rectangle "Bot Framework" {
+        [Bot Manager]
+        [Trading Bots]
+        [Strategy Engine]
+    }
+    
+    rectangle "Market Data" {
+        [Data Fetcher]
+        [Price Aggregator]
+        [Technical Indicators]
+    }
+    
+    rectangle "Trading Engine" {
+        [Order Manager]
+        [Position Tracker]
+        [Risk Management]
+    }
+}
+
+cloud "External Services" {
+    [Cryptocurrency Exchanges]
+    [Market Data Providers]
+}
+
+database "Database Layer" {
+    database "MongoDB" {
+        [Bot Configurations]
+        [Trading History]
+        [Market Data Cache]
+        [User Data]
+    }
+    database "TimescaleDB" {
+        [Historical Prices]
+        [Performance Metrics]
+    }
+}
+
+' Connections
+Dashboard --> [REST Endpoints] : HTTP/HTTPS
+[WebSocket Client] <--> [WebSocket Server] : WebSocket
+[Bot Management UI] --> [Strategy Configuration]
+[Market Data Charts] --> [Trading Charts]
+[Performance Metrics] --> [Performance Graphs]
+
+[REST Endpoints] --> [Bot Manager]
+[WebSocket Server] --> [Bot Manager]
+[Bot Manager] --> [Trading Bots]
+[Trading Bots] --> [Strategy Engine]
+[Trading Bots] --> [Order Manager]
+
+[Data Fetcher] --> [Cryptocurrency Exchanges]
+[Data Fetcher] --> [Market Data Providers]
+[Data Fetcher] --> [Market Data Cache]
+
+[Order Manager] --> [Cryptocurrency Exchanges]
+[Position Tracker] --> [Trading History]
+[Trading Bots] --> [Performance Metrics]
+
+' Data flows
+[Market Data Cache] ..> [Technical Indicators] : Processed by
+[Technical Indicators] ..> [Strategy Engine] : Input for
+[Trading History] ..> [Performance Graphs] : Visualized in
+[Historical Prices] ..> [Trading Charts] : Displayed in
+
+' Legend
+rectangle "Legend" {
+    component "Component"
+    interface "Interface"
+    database "Database"
+    [Module]
+    () "API"
+    
+    note right
+        --- Arrow Types ---
+        --> : Direct Dependency
+        ..> : Data Flow
+        <--> : Bidirectional
+    end note
+}
+
+@enduml

@@ -1,0 +1,119 @@
+@startuml CryptoTrader Sequence Diagram
+
+' Styling
+skinparam sequence {
+    ArrowColor #666666
+    LifeLineBackgroundColor White
+    LifeLineBorderColor #666666
+    ParticipantBackgroundColor White
+    ParticipantBorderColor #666666
+}
+
+' Participants
+participant "API Client" as Client
+participant "FastAPI Server" as API
+participant "BotManager" as Manager
+participant "TradingBot" as Bot
+participant "Strategy" as Strategy
+participant "Exchange" as Exchange
+database "Database" as DB
+
+' Bot Creation Flow
+Client -> API: POST /bots/create\n{strategy_type, config}
+activate API
+
+API -> Manager: create_bot(config)
+activate Manager
+
+Manager -> Bot: <<create>>
+activate Bot
+
+Bot -> Strategy: <<create>>
+activate Strategy
+
+Manager --> API: bot_id
+deactivate Manager
+
+API --> Client: {bot_id, status}
+deactivate API
+
+' Bot Operation Flow
+Client -> API: POST /bots/{bot_id}/start
+activate API
+
+API -> Manager: start_bot(bot_id)
+activate Manager
+
+Manager -> Bot: start()
+activate Bot
+
+Bot -> Exchange: connect()
+activate Exchange
+Exchange --> Bot: connected
+deactivate Exchange
+
+loop Every Interval
+    Bot -> Exchange: fetch_market_data()
+    activate Exchange
+    Exchange --> Bot: market_data
+    deactivate Exchange
+    
+    Bot -> Strategy: generate_signals(market_data)
+    activate Strategy
+    Strategy --> Bot: signals
+    deactivate Strategy
+    
+    alt signal == BUY
+        Bot -> Exchange: place_buy_order()
+        activate Exchange
+        Exchange --> Bot: order_status
+        deactivate Exchange
+    else signal == SELL
+        Bot -> Exchange: place_sell_order()
+        activate Exchange
+        Exchange --> Bot: order_status
+        deactivate Exchange
+    end
+    
+    Bot -> DB: save_trade_history()
+    activate DB
+    DB --> Bot: saved
+    deactivate DB
+end
+
+' Bot Status Check
+Client -> API: GET /bots/{bot_id}/status
+activate API
+
+API -> Manager: get_bot_status(bot_id)
+activate Manager
+
+Manager -> Bot: get_performance()
+Bot --> Manager: performance_metrics
+
+Manager --> API: bot_status
+deactivate Manager
+
+API --> Client: {status, performance}
+deactivate API
+
+' Bot Stop Flow
+Client -> API: POST /bots/{bot_id}/stop
+activate API
+
+API -> Manager: stop_bot(bot_id)
+activate Manager
+
+Manager -> Bot: stop()
+Bot -> Exchange: disconnect()
+activate Exchange
+Exchange --> Bot: disconnected
+deactivate Exchange
+
+Manager --> API: success
+deactivate Manager
+
+API --> Client: {status: stopped}
+deactivate API
+
+@enduml

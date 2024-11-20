@@ -1,0 +1,121 @@
+@startuml CryptoTrader Class Diagram
+
+' Styling
+skinparam class {
+    BackgroundColor White
+    ArrowColor #666666
+    BorderColor #666666
+}
+
+' Base Classes
+abstract class BaseStrategy {
+    + name: str
+    + position: float
+    + cash: float
+    + portfolio_value: float
+    + trades: List[Dict]
+    + max_position_size: float
+    + stop_loss_pct: float
+    + take_profit_pct: float
+    + {abstract} generate_signals(data: DataFrame): Series
+}
+
+class MarketData {
+    + symbol: str
+    + timestamp: datetime
+    + open_price: float
+    + high_price: float
+    + low_price: float
+    + close_price: float
+    + volume: float
+}
+
+' Strategy Implementations
+class MeanReversionStrategy {
+    + window_size: int
+    + std_dev_threshold: float
+    + generate_signals(data: DataFrame): Series
+    + calculate_zscore(prices: Series): Series
+}
+
+class TrendFollowingStrategy {
+    + fast_ma_period: int
+    + slow_ma_period: int
+    + rsi_period: int
+    + generate_signals(data: DataFrame): Series
+    + calculate_rsi(prices: Series): Series
+}
+
+class MovingAverageStrategy {
+    + ma_period: int
+    + generate_signals(data: DataFrame): Series
+}
+
+class MACrossStrategy {
+    + fast_period: int
+    + slow_period: int
+    + generate_signals(data: DataFrame): Series
+}
+
+class AdaptiveStrategy {
+    + strategies: List[BaseStrategy]
+    + weights: Dict[str, float]
+    + generate_signals(data: DataFrame): Series
+    + update_weights(performance: Dict)
+}
+
+class MLStrategy {
+    + model: Any
+    + features: List[str]
+    + generate_signals(data: DataFrame): Series
+    + train(data: DataFrame)
+    + predict(data: DataFrame): Series
+}
+
+class RLStrategy {
+    + agent: Any
+    + state_size: int
+    + action_size: int
+    + generate_signals(data: DataFrame): Series
+    + train(data: DataFrame)
+    + get_action(state: Array): int
+}
+
+' Bot Management
+class BotManager {
+    + bots: Dict[str, TradingBot]
+    + create_bot(config: Dict): TradingBot
+    + delete_bot(bot_id: str)
+    + start_bot(bot_id: str)
+    + stop_bot(bot_id: str)
+    + get_bot_status(bot_id: str): Dict
+}
+
+class TradingBot {
+    + id: str
+    + strategy: BaseStrategy
+    + exchange: Exchange
+    + symbol: str
+    + status: str
+    + start()
+    + stop()
+    + update()
+    + get_performance(): Dict
+}
+
+' Relationships
+BaseStrategy <|-- MeanReversionStrategy
+BaseStrategy <|-- TrendFollowingStrategy
+BaseStrategy <|-- MovingAverageStrategy
+BaseStrategy <|-- MACrossStrategy
+BaseStrategy <|-- AdaptiveStrategy
+BaseStrategy <|-- MLStrategy
+BaseStrategy <|-- RLStrategy
+
+TradingBot --> BaseStrategy
+TradingBot --> MarketData
+BotManager --> TradingBot
+
+AdaptiveStrategy --> "*" BaseStrategy
+
+@enduml

@@ -1,0 +1,9 @@
+=== Trading Performance Summary ===
+Number of trades: 194
+Total PnL: $21328.86
+Win rate: 62.89%
+Average winning trade: $377.66
+Average losing trade: $-47.46
+Largest winning trade: $1484.52
+Largest losing trade: $-134.27
+Final portfolio value: $31328.86
